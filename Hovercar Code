@@ -1,0 +1,223 @@
+#if !defined(ESP32)
+	#error This code is intended to run on the ESP32 platform! Please check your Tools->Board setting.
+#endif
+
+#define TIMER_INTERRUPT_DEBUG       0
+#define ISR_SERVO_DEBUG             1
+
+// For ESP32_C3, select ESP32 timer number (0-1)
+// For ESP32 and ESP32_S2, select ESP32 timer number (0-3)
+#if defined( ARDUINO_ESP32C3_DEV )
+	#define USE_ESP32_TIMER_NO          1
+#else
+	#define USE_ESP32_TIMER_NO          3
+#endif
+
+#include "ESP32_New_ISR_Servo.h"
+#include <WiFi.h>
+#include <esp_now.h>
+#include "ESP32_New_ISR_Servo.h"
+#include <FastLED.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
+
+Adafruit_MPU6050 mpu;
+
+#define MIN_MICROS 1000  // For 0-180 degree servo: (MIN) - 544, (MAX) - 2450
+#define MAX_MICROS 2000 
+
+const int I2C_SDA = 47;
+const int I2C_SCL = 48;
+const int LED_PIN = 38; // Define the pin connected to the data input of the LED strip
+const int NUM_LEDS = 2; // Define the number of LEDs in your strip
+const int LOW_LED = 9;
+
+CRGB leds[NUM_LEDS];
+
+unsigned long previousMillis = 0; // Store the last time LED colors were updated
+unsigned long previousMillis2 = 0; 
+const long interval = 20; // Interval for color change in milliseconds
+
+int servoIndex1 = -1;
+int servoIndex2 = -1;
+int servoIndex3 = -1;
+int servoIndex4 = -1;
+int servoIndex5 = -1;
+int servoIndex6 = -1;
+
+int prop1 = 0;
+int prop2 = 0;
+int prop3 = 0;
+int prop4 = 0;
+
+float stableX = 0.11;
+float stableY = 0.04;
+float tolerance = 0.01;
+int controllerSpeed = 0;
+
+typedef struct struct_message {
+  int a; // Pot1
+  int b; // Pot2
+  int c; // J1X
+  int d; // J1Y
+  int e; // J2X
+  int f; // J2Y
+  int g; // Button number
+} struct_message;
+
+struct_message dataRecieved;
+
+void setup() {
+  FastLED.addLeds<SK6812, LED_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(60); // 0-255, 255 being the brightest
+
+  Wire.begin(I2C_SDA, I2C_SCL); // Custom I2C pins
+  
+  if (!mpu.begin()) // Initialize MPU6050
+  {
+    while (1) 
+    {
+      fill_solid(leds, NUM_LEDS, CHSV(0, 255, 255)); // Red LEDs to indicate problem finding MPU6050
+      FastLED.show();
+      delay(20);
+    }
+  }
+    
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
+
+  //Select ESP32 timer USE_ESP32_TIMER_NO
+	ESP32_ISR_Servos.useTimer(USE_ESP32_TIMER_NO);
+  servoIndex1 = ESP32_ISR_Servos.setupServo(4, MIN_MICROS, MAX_MICROS);
+	servoIndex2 = ESP32_ISR_Servos.setupServo(5, MIN_MICROS, MAX_MICROS);
+  servoIndex3 = ESP32_ISR_Servos.setupServo(6, MIN_MICROS, MAX_MICROS);
+  servoIndex4 = ESP32_ISR_Servos.setupServo(7, MIN_MICROS, MAX_MICROS);
+  servoIndex5 = ESP32_ISR_Servos.setupServo(14, 544, 2450);
+  servoIndex6 = ESP32_ISR_Servos.setupServo(15, 544, 2450);
+
+  WiFi.mode(WIFI_STA); // Enable Wi-Fi
+  
+  Serial.begin(115200);
+
+  if (esp_now_init() != ESP_OK) { // Check ESP-NOW
+    //Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  pinMode(LOW_LED, OUTPUT);
+
+  esp_now_register_recv_cb(callData); // Get wireless packets
+  
+  ESP32_ISR_Servos.setPosition(servoIndex1, 0);
+  ESP32_ISR_Servos.setPosition(servoIndex2, 0);
+  ESP32_ISR_Servos.setPosition(servoIndex3, 0);
+  ESP32_ISR_Servos.setPosition(servoIndex4, 0);
+  ESP32_ISR_Servos.setPosition(servoIndex5, 120);
+  ESP32_ISR_Servos.setPosition(servoIndex6, 120);
+  delay(3000);
+}
+
+void loop() 
+{
+  unsigned long currentMillis = millis();  // Get the current time
+
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+
+  if (currentMillis - previousMillis >= interval) 
+  {
+    previousMillis = currentMillis;  // Save the last time colors were updated
+
+    // Cycle through all visible colors
+    static int i = 0;
+    fill_solid(leds, NUM_LEDS, CHSV(i, 255, 255)); // Set all LEDs to the current color (0: red, 85: green, 170: blue, etc)
+
+    i++; // Increment the color index
+    if (i >= 256)
+      i = 0;  // Reset the color index when it reaches 256
+  }
+  FastLED.show();
+
+  // Button chain
+  if (dataRecieved.g == 35) // Normal control
+  {
+    prop1 = dataRecieved.a;
+    prop2 = dataRecieved.a;
+    prop3 = dataRecieved.a;
+    prop4 = dataRecieved.a;
+  }
+  else if (dataRecieved.g == 11) // Servo control
+  {
+    ESP32_ISR_Servos.setPosition(servoIndex5, dataRecieved.b);
+    ESP32_ISR_Servos.setPosition(servoIndex6, dataRecieved.b);
+  }
+  else if (dataRecieved.g == 16) // Servo control
+  {
+    prop1 = 0;
+    prop2 = 0;
+    prop3 = 0;
+    prop4 = 0;
+  }
+
+  // Joysticks
+  if (dataRecieved.d == 1) // J1Y
+  {
+    ESP32_ISR_Servos.setPosition(servoIndex5, 130); // Servos up
+    ESP32_ISR_Servos.setPosition(servoIndex6, 130);
+  }
+  else if (dataRecieved.d == -1) // J1Y
+  {
+    ESP32_ISR_Servos.setPosition(servoIndex5, 55); // Servos down
+    ESP32_ISR_Servos.setPosition(servoIndex6, 55);
+  }
+
+  // Joystick left/right
+  if (dataRecieved.e == 1) // J2X
+  {
+    prop4 = dataRecieved.a;
+    prop2 = dataRecieved.a;
+  }
+  else if (dataRecieved.e == -1) // J2X
+  {
+    prop3 = dataRecieved.a;
+    prop1 = dataRecieved.a;
+  }
+
+  // Joystick up/down
+  if (dataRecieved.f == 1) // J2Y
+  {
+    prop1 = dataRecieved.a;
+    prop2 = dataRecieved.a;
+  }
+  else if (dataRecieved.f == -1) // J2Y
+  {
+    prop3 = dataRecieved.a;
+    prop4 = dataRecieved.a;
+  }
+  
+  if (dataRecieved.f != -1 && dataRecieved.f != 1 && dataRecieved.e != -1 && dataRecieved.e != 1) 
+  {
+    prop1 = 0;
+    prop2 = 0;
+    prop3 = 0;
+    prop4 = 0;
+  }
+
+  // Ensure propeller speeds are within the valid range
+  prop1 = constrain(prop1, 0, 180);
+  prop2 = constrain(prop2, 0, 180);
+  prop3 = constrain(prop3, 0, 180);
+  prop4 = constrain(prop4, 0, 180);
+  
+  ESP32_ISR_Servos.setPosition(servoIndex1, prop1);
+  ESP32_ISR_Servos.setPosition(servoIndex2, prop2);
+  ESP32_ISR_Servos.setPosition(servoIndex3, prop3);
+  ESP32_ISR_Servos.setPosition(servoIndex4, prop4);
+
+}
+
+void callData(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  memcpy(&dataRecieved, incomingData, sizeof(dataRecieved));
+}
