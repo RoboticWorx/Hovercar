@@ -89,9 +89,9 @@ void setup() {
   mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
 
   //Select ESP32 timer USE_ESP32_TIMER_NO
-	ESP32_ISR_Servos.useTimer(USE_ESP32_TIMER_NO);
+  ESP32_ISR_Servos.useTimer(USE_ESP32_TIMER_NO);
   servoIndex1 = ESP32_ISR_Servos.setupServo(4, MIN_MICROS, MAX_MICROS);
-	servoIndex2 = ESP32_ISR_Servos.setupServo(5, MIN_MICROS, MAX_MICROS);
+  servoIndex2 = ESP32_ISR_Servos.setupServo(5, MIN_MICROS, MAX_MICROS);
   servoIndex3 = ESP32_ISR_Servos.setupServo(6, MIN_MICROS, MAX_MICROS);
   servoIndex4 = ESP32_ISR_Servos.setupServo(7, MIN_MICROS, MAX_MICROS);
   servoIndex5 = ESP32_ISR_Servos.setupServo(14, 544, 2450);
