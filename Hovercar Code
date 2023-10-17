@@ -51,9 +51,6 @@ int prop2 = 0;
 int prop3 = 0;
 int prop4 = 0;
 
-float stableX = 0.11;
-float stableY = 0.04;
-float tolerance = 0.01;
 int controllerSpeed = 0;
 
 typedef struct struct_message {
