@@ -19,4 +19,4 @@ Order Qty.,LCSC Part Number,Manufacture Part Number,Manufacturer,Package,Descrip
 ,,,,,,,,
 ,OPTIONAL:,,,,,,,
 1,47k5 ohm resistor for the voltage divider if you'd like to monitor battery levels.,,,,,,,
-,"If you want to try and build the L2G2ISTR circuit, you will need:",One 0u1F capacitor,One 10nF capacitor,One 1uF capacitor,One 100pF capacitor,L2G2ISTR IC from Digikey,,
+,"If you want to try and build the L2G2ISTR circuit, you will need:",x1 0u1F capacitor,x1 10nF capacitor,x1 1uF capacitor,x1 100pF capacitor,L2G2ISTR IC from Digikey,,
